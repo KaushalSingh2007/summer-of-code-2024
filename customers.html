@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customers</title>
+</head>
+<body>
+    <h1>Customers</h1>
+    <table>
+        <tr>
+            <th>Customer ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Contact</th>
+        </tr>
+        {% for customer in customers %}
+        <tr>
+            <td>{{ customer.c_ID }}</td>
+            <td>{{ customer.c_name }}</td>
+            <td>{{ customer.c_email }}</td>
+            <td>{{ customer.c_contact }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

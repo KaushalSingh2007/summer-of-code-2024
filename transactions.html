@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transactions</title>
+</head>
+<body>
+    <h1>Transactions</h1>
+    <a href="/add_transaction">Add Transaction</a>
+    <table>
+        <tr>
+            <th>Transaction ID</th>
+            <th>Customer ID</th>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Category</th>
+        </tr>
+        {% for transaction in transactions %}
+        <tr>
+            <td>{{ transaction.t_id }}</td>
+            <td>{{ transaction.c_id }}</td>
+            <td>{{ transaction.t_date }}</td>
+            <td>{{ transaction.t_amount }}</td>
+            <td>{{ transaction.t_category }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
