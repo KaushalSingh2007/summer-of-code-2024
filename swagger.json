@@ -1,0 +1,55 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "version": "1.0.0",
+        "title": "E-Commerce App API",
+        "description": "API documentation for the E-Commerce App"
+    },
+    "paths": {
+        "/login": {
+            "post": {
+                "summary": "Login a user",
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "formData",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "name": "password",
+                        "in": "formData",
+                        "required": true,
+                        "type": "string"
+                    }
+                ],
+                "responses": {
+                    "200": { "description": "Success" },
+                    "401": { "description": "Unauthorized" }
+                }
+            }
+        },
+        "/register": {
+            "post": {
+                "summary": "Register a new user",
+                "parameters": [
+                    {
+                        "name": "username",
+                        "in": "formData",
+                        "required": true,
+                        "type": "string"
+                    },
+                    {
+                        "name": "password",
+                        "in": "formData",
+                        "required": true,
+                        "type": "string"
+                    }
+                ],
+                "responses": {
+                    "200": { "description": "Success" }
+                }
+            }
+        }
+    }
+}

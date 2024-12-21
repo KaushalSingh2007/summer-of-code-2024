@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+</head>
+<body>
+    <h1>Admin Dashboard</h1>
+    <h2>Products</h2>
+    <ul>
+        {% for product in products %}
+        <li>
+            {{ product.name }} - ${{ product.price }} - Stock: {{ product.stock }}
+            <form method="POST" action="/admin_crud/update_product">
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                <input type="text" name="name" value="{{ product.name }}" required>
+                <input type="number" name="price" value="{{ product.price }}" required>
+                <input type="number" name="stock" value="{{ product.stock }}" required>
+                <button type="submit">Update</button>
+            </form>
+            <form method="POST" action="/admin_crud/delete_product" style="display:inline;">
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                <button type="submit">Delete</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <h2>Add Product</h2>
+    <form method="POST" action="/admin_crud/add_product">
+        <label>Name:</label>
+        <input type="text" name="name" required>
+        <label>Price:</label>
+        <input type="number" name="price" required>
+        <label>Stock:</label>
+        <input type="number" name="stock" required>
+        <button type="submit">Add</button>
+    </form>
+
+    <h2>Customers</h2>
+    <ul>
+        {% for customer in customers %}
+        <li>{{ customer.username }}</li>
+        {% endfor %}
+    </ul>
+    <a href="/logout">Logout</a>
+</body>
+</html>

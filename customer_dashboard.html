@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Customer Dashboard</title>
+</head>
+<body>
+    <h1>Customer Dashboard</h1>
+    <h2>Available Products</h2>
+    <ul>
+        {% for product in products %}
+        <li>
+            {{ product.name }} - ${{ product.price }} - Stock: {{ product.stock }}
+            <form method="POST" action="/buy/{{ product.id }}">
+                <button type="submit">Buy</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    <a href="/customer_transactions">View Transactions</a> | <form method="POST" action="/delete_account" style="display:inline;"><button type="submit">Delete Account</button></form> | <a href="/logout">Logout</a>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Customer Transactions</title>
+</head>
+<body>
+    <h1>Your Transactions</h1>
+    <ul>
+        {% for transaction in transactions %}
+        <li>Product ID: {{ transaction.product_id }} - Quantity: {{ transaction.quantity }}</li>
+        {% endfor %}
+    </ul>
+    <a href="/customer_dashboard">Back to Dashboard</a>
+</body>
+</html>

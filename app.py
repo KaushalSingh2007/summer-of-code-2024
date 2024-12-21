@@ -1,108 +1,171 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, request, session, redirect, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from flask_migrate import Migrate
+from flask_bcrypt import Bcrypt
+from flask_restx import Api, Resource, fields
+from functools import wraps
 
-# Initialize the Flask app
 app = Flask(__name__)
-
-# Replace with your PostgreSQL credentials
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:kaushal@localhost:5432/bank'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:kaushal@localhost/appdata'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = 'your_secret_key'
 
-# Initialize SQLAlchemy with app
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+bcrypt = Bcrypt(app)
+api = Api(app, title="E-commerce App", description="Role-based E-commerce API")
+
+# Namespaces
+auth_ns = api.namespace('auth', description='Authentication')
+customer_ns = api.namespace('customer', description='Customer Operations')
+admin_ns = api.namespace('admin', description='Admin Operations')
 
 # Models
-class InventoryItem(db.Model):
-    __tablename__ = 'inventory_item'  # Specify table name
-    Item_SKU = db.Column(db.String(20), primary_key=True)
-    Item_Name = db.Column(db.String(50), nullable=False)
-    Item_Description = db.Column(db.String(200))
-    Item_qty = db.Column(db.Integer, nullable=False)
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+    role = db.Column(db.String(10), nullable=False)  # 'customer' or 'admin'
 
-class Customer(db.Model):
-    __tablename__ = 'customer'  # Specify table name
-    c_ID = db.Column(db.Integer, primary_key=True)
-    c_name = db.Column(db.String(50), nullable=False)
-    c_email = db.Column(db.String(100), nullable=False)
-    c_contact = db.Column(db.String(15), nullable=False)
-
-class Staff(db.Model):
-    __tablename__ = 'staff'  # Specify table name
-    s_ID = db.Column(db.Integer, primary_key=True)
-    s_name = db.Column(db.String(50), nullable=False)
-    s_email = db.Column(db.String(100), nullable=False)
-    s_contact = db.Column(db.String(15), nullable=False)
+class Product(db.Model):
+    __tablename__ = 'products'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    price = db.Column(db.Numeric(10, 2), nullable=False)
+    stock = db.Column(db.Integer, nullable=False)
 
 class Transaction(db.Model):
-    __tablename__ = 'transaction'  # Specify table name
-    t_id = db.Column(db.Integer, primary_key=True)
-    c_id = db.Column(db.Integer, db.ForeignKey('customer.c_ID'), nullable=False)
-    t_date = db.Column(db.Date, nullable=False)
-    t_amount = db.Column(db.Float, nullable=False)
-    t_category = db.Column(db.String(50), nullable=False)
+    __tablename__ = 'transactions'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
 
-# Routes
-@app.route('/')
-def home():
-    return render_template('home.html')
+# Decorator for login and role-based access
+def login_required(role=None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if 'user_id' not in session:
+                return {"message": "You must be logged in to access this resource."}, 401
+            if role and session.get('role') != role:
+                return {"message": "Access denied for this role."}, 403
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
-@app.route('/inventory')
-def inventory():
-    items = InventoryItem.query.all()
-    return render_template('inventory.html', items=items)
+# API Models
+user_model = api.model('User', {
+    'username': fields.String(required=True),
+    'password': fields.String(required=True),
+    'role': fields.String(required=True, enum=['customer', 'admin'])
+})
 
-@app.route('/add_inventory', methods=['GET', 'POST'])
-def add_inventory():
-    if request.method == 'POST':
-        item = InventoryItem(
-            Item_SKU=request.form['Item_SKU'],
-            Item_Name=request.form['Item_Name'],
-            Item_Description=request.form['Item_Description'],
-            Item_qty=request.form['Item_qty']
-        )
-        db.session.add(item)
+login_model = api.model('Login', {
+    'username': fields.String(required=True),
+    'password': fields.String(required=True)
+})
+
+product_model = api.model('Product', {
+    'id': fields.Integer(readOnly=True),
+    'name': fields.String(required=True),
+    'price': fields.Float(required=True),
+    'stock': fields.Integer(required=True)
+})
+
+transaction_model = api.model('Transaction', {
+    'id': fields.Integer(readOnly=True),
+    'user_id': fields.Integer(required=True),
+    'product_id': fields.Integer(required=True),
+    'quantity': fields.Integer(required=True)
+})
+
+# Authentication Endpoints
+@auth_ns.route('/register')
+class Register(Resource):
+    @api.expect(user_model)
+    def post(self):
+        data = api.payload
+        hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+        new_user = User(username=data['username'], password=hashed_password, role=data['role'])
+        db.session.add(new_user)
         db.session.commit()
-        return redirect(url_for('inventory'))
-    return render_template('add_inventory.html')
+        return {"message": "User registered successfully."}, 201
 
-@app.route('/customers')
-def customers():
-    customers = Customer.query.all()
-    return render_template('customers.html', customers=customers)
+@auth_ns.route('/login')
+class Login(Resource):
+    @api.expect(login_model)
+    def post(self):
+        data = api.payload
+        user = User.query.filter_by(username=data['username']).first()
+        if user and bcrypt.check_password_hash(user.password, data['password']):
+            session['user_id'] = user.id
+            session['role'] = user.role
+            if user.role == 'customer':
+                return {"message": "Login successful", "role": "customer", "redirect_url": "/customer/dashboard"}, 200
+            elif user.role == 'admin':
+                return {"message": "Login successful", "role": "admin", "redirect_url": "/admin/dashboard"}, 200
+        return {"message": "Invalid username or password"}, 401
 
-@app.route('/staff')
-def staff():
-    staff_list = Staff.query.all()
-    return render_template('staff.html', staff_list=staff_list)
+@auth_ns.route('/logout')
+class Logout(Resource):
+    def get(self):
+        session.clear()
+        return {"message": "Logged out successfully."}, 200
 
-@app.route('/transactions')
-def transactions():
-    transactions = Transaction.query.all()
-    return render_template('transactions.html', transactions=transactions)
+# Customer Endpoints
+@customer_ns.route('/dashboard')
+class CustomerDashboard(Resource):
+    @login_required(role='customer')
+    def get(self):
+        return {"message": "Welcome to the customer dashboard!"}, 200
 
-@app.route('/add_transaction', methods=['GET', 'POST'])
-def add_transaction():
-    if request.method == 'POST':
-        transaction = Transaction(
-            c_id=request.form['c_id'],
-            t_date=datetime.strptime(request.form['t_date'], '%Y-%m-%d'),
-            t_amount=request.form['t_amount'],
-            t_category=request.form['t_category']
-        )
-        db.session.add(transaction)
+@customer_ns.route('/products')
+class CustomerProducts(Resource):
+    @login_required(role='customer')
+    @api.marshal_list_with(product_model)
+    def get(self):
+        return Product.query.all()
+
+@customer_ns.route('/transactions')
+class CustomerTransactions(Resource):
+    @login_required(role='customer')
+    @api.marshal_list_with(transaction_model)
+    def get(self):
+        user_id = session.get('user_id')
+        return Transaction.query.filter_by(user_id=user_id).all()
+
+# Admin Endpoints
+@admin_ns.route('/dashboard')
+class AdminDashboard(Resource):
+    @login_required(role='admin')
+    def get(self):
+        return {"message": "Welcome to the admin dashboard!"}, 200
+
+@admin_ns.route('/products')
+class AdminProducts(Resource):
+    @login_required(role='admin')
+    @api.marshal_list_with(product_model)
+    def get(self):
+        return Product.query.all()
+
+    @login_required(role='admin')
+    @api.expect(product_model)
+    def post(self):
+        data = api.payload
+        new_product = Product(name=data['name'], price=data['price'], stock=data['stock'])
+        db.session.add(new_product)
         db.session.commit()
-        return redirect(url_for('transactions'))
-    return render_template('add_transaction.html')
+        return {"message": "Product created successfully."}, 201
 
-# Initialize the database and create tables when the app runs
-def init_db():
-    with app.app_context():  # Ensure app context is active
-        db.create_all()  # Create tables in PostgreSQL
+@admin_ns.route('/transactions')
+class AdminTransactions(Resource):
+    @login_required(role='admin')
+    @api.marshal_list_with(transaction_model)
+    def get(self):
+        return Transaction.query.all()
 
-# Main block to run the app and initialize the database
+# Run the Application
 if __name__ == '__main__':
-    init_db()  # Initialize the database tables before running the app
     app.run(debug=True)
-
-
