@@ -1,55 +1,334 @@
 {
-    "swagger": "2.0",
+    "openapi": "3.0.2",
     "info": {
-        "version": "1.0.0",
-        "title": "E-Commerce App API",
-        "description": "API documentation for the E-Commerce App"
+      "title": "Staff API",
+      "version": "1.0",
+      "description": "An API for managing staff, customers, and transactions."
     },
     "paths": {
-        "/login": {
-            "post": {
-                "summary": "Login a user",
-                "parameters": [
-                    {
-                        "name": "username",
-                        "in": "formData",
-                        "required": true,
-                        "type": "string"
-                    },
-                    {
-                        "name": "password",
-                        "in": "formData",
-                        "required": true,
-                        "type": "string"
-                    }
-                ],
-                "responses": {
-                    "200": { "description": "Success" },
-                    "401": { "description": "Unauthorized" }
+      "/login/login": {
+        "post": {
+          "tags": ["login"],
+          "summary": "User Login",
+          "operationId": "userLogin",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Login"
                 }
+              }
             }
-        },
-        "/register": {
-            "post": {
-                "summary": "Register a new user",
-                "parameters": [
-                    {
-                        "name": "username",
-                        "in": "formData",
-                        "required": true,
-                        "type": "string"
-                    },
-                    {
-                        "name": "password",
-                        "in": "formData",
-                        "required": true,
-                        "type": "string"
-                    }
-                ],
-                "responses": {
-                    "200": { "description": "Success" }
+          },
+          "responses": {
+            "200": {
+              "description": "Login successful",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "message": "Login successful"
+                  }
                 }
+              }
+            },
+            "401": {
+              "description": "Invalid credentials"
             }
+          }
         }
+      },
+      "/login/logout": {
+        "post": {
+          "tags": ["login"],
+          "summary": "User Logout",
+          "operationId": "userLogout",
+          "responses": {
+            "200": {
+              "description": "Logout successful",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "message": "Logout successful"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/login/register": {
+        "post": {
+          "tags": ["login"],
+          "summary": "User Registration",
+          "operationId": "userRegistration",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Register"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Registration successful, check email for verification",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "message": "Registration successful, check email for verification"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Email or Username already taken"
+            }
+          }
+        }
+      },
+      "/transactions/": {
+        "get": {
+          "tags": ["transactions"],
+          "summary": "Get all transactions",
+          "operationId": "getAllTransactions",
+          "responses": {
+            "200": {
+              "description": "List of transactions",
+              "content": {
+                "application/json": {
+                  "example": [
+                    {
+                      "id": 1,
+                      "c_id": 1,
+                      "s_id": 1,
+                      "product_amount_list": "product1, product2",
+                      "date": "2024-12-31",
+                      "time": "10:00 AM"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "tags": ["transactions"],
+          "summary": "Create a new transaction",
+          "operationId": "createTransaction",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transaction"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Transaction created successfully",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "message": "Transaction created successfully."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/customers/": {
+        "get": {
+          "tags": ["customers"],
+          "summary": "Get all customers",
+          "operationId": "getAllCustomers",
+          "responses": {
+            "200": {
+              "description": "List of customers",
+              "content": {
+                "application/json": {
+                  "example": [
+                    {
+                      "id": 1,
+                      "name": "John Doe",
+                      "email": "johndoe@example.com"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "tags": ["customers"],
+          "summary": "Create a new customer",
+          "operationId": "createCustomer",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Customer"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Customer created successfully",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "message": "Customer created successfully."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/staff/": {
+        "get": {
+          "tags": ["staff"],
+          "summary": "Get all staff members",
+          "operationId": "getAllStaff",
+          "responses": {
+            "200": {
+              "description": "List of staff",
+              "content": {
+                "application/json": {
+                  "example": [
+                    {
+                      "id": 1,
+                      "username": "staff1",
+                      "email": "staff1@example.com",
+                      "is_admin": true,
+                      "is_approved": true
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "tags": ["staff"],
+          "summary": "Create a new staff member",
+          "operationId": "createStaff",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Staff"
+                }
+              }
+            }
+          },
+          "responses": {
+            "201": {
+              "description": "Staff created successfully",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "message": "Staff created successfully."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "Login": {
+          "type": "object",
+          "properties": {
+            "email": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            }
+          },
+          "required": ["email", "password"]
+        },
+        "Register": {
+          "type": "object",
+          "properties": {
+            "username": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            }
+          },
+          "required": ["username", "email", "password"]
+        },
+        "Transaction": {
+          "type": "object",
+          "properties": {
+            "c_id": {
+              "type": "integer"
+            },
+            "s_id": {
+              "type": "integer"
+            },
+            "product_amount_list": {
+              "type": "string"
+            },
+            "date": {
+              "type": "string"
+            },
+            "time": {
+              "type": "string"
+            }
+          },
+          "required": ["c_id", "s_id", "product_amount_list", "date", "time"]
+        },
+        "Customer": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            }
+          },
+          "required": ["name", "email"]
+        },
+        "Staff": {
+          "type": "object",
+          "properties": {
+            "username": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "password": {
+              "type": "string"
+            },
+            "is_admin": {
+              "type": "boolean"
+            },
+            "is_approved": {
+              "type": "boolean"
+            }
+          },
+          "required": ["username", "email", "password"]
+        }
+      }
     }
-}
+  }
+  

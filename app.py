@@ -1,171 +1,295 @@
-from flask import Flask, request, session, redirect, url_for, jsonify
+from flask import Flask, request, jsonify, url_for, render_template
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from flask_bcrypt import Bcrypt
-from flask_restx import Api, Resource, fields
-from functools import wraps
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from flask_restx import Api, Resource, fields, Namespace
+from itsdangerous import URLSafeTimedSerializer
+from flask_mail import Mail, Message
+from flask_migrate import Migrate
+import pyotp
+import logging
+from datetime import datetime
 
+# Initialize Flask application
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:kaushal@localhost/appdata'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SECRET_KEY'] = 'your_secret_key'
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'singhkaushaltomar@gmail.com'
+app.config['MAIL_PASSWORD'] = 'Kjee@2024AIR1'
 
+# Initialize extensions
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
-api = Api(app, title="E-commerce App", description="Role-based E-commerce API")
+login_manager = LoginManager(app)
+migrate = Migrate(app, db)
+mail = Mail(app)
+api = Api(app, version='1.0', title='API', description='CRUD operations and Authentication')
+
+# Configure login manager
+login_manager.login_view = 'login'
+serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+logging.basicConfig(filename='auth.log', level=logging.INFO)
 
 # Namespaces
-auth_ns = api.namespace('auth', description='Authentication')
-customer_ns = api.namespace('customer', description='Customer Operations')
-admin_ns = api.namespace('admin', description='Admin Operations')
+auth_ns = Namespace('auth', description='Authentication operations')
+transaction_ns = Namespace('transactions', description='Transaction operations')
+staff_ns = Namespace('staff', description='Staff operations')
+customer_ns = Namespace('customers', description='Customer operations')
 
-# Models
-class User(db.Model):
-    __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
-    role = db.Column(db.String(10), nullable=False)  # 'customer' or 'admin'
+api.add_namespace(auth_ns)
+api.add_namespace(transaction_ns)
+api.add_namespace(staff_ns)
+api.add_namespace(customer_ns)
 
-class Product(db.Model):
-    __tablename__ = 'products'
+# Database Models
+class Staff(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(150), nullable=False)
-    price = db.Column(db.Numeric(10, 2), nullable=False)
-    stock = db.Column(db.Integer, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(128), nullable=False)
+    is_admin = db.Column(db.Boolean, default=False)
+    is_approved = db.Column(db.Boolean, default=False)
+    is_email_verified = db.Column(db.Boolean, default=False)
+    verification_token = db.Column(db.String(128), nullable=True)
+    totp_secret = db.Column(db.String(16), default=pyotp.random_base32)
+
+class Customer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
 
 class Transaction(db.Model):
-    __tablename__ = 'transactions'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
-    quantity = db.Column(db.Integer, nullable=False)
+    c_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
+    s_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
+    product_amount_list = db.Column(db.String, nullable=False)
+    date = db.Column(db.String, nullable=False)
+    time = db.Column(db.String, nullable=False)
 
-# Decorator for login and role-based access
-def login_required(role=None):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            if 'user_id' not in session:
-                return {"message": "You must be logged in to access this resource."}, 401
-            if role and session.get('role') != role:
-                return {"message": "Access denied for this role."}, 403
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
+    customer = db.relationship('Customer', backref=db.backref('transactions', lazy=True))
+    staff = db.relationship('Staff', backref=db.backref('transactions', lazy=True))
 
 # API Models
-user_model = api.model('User', {
-    'username': fields.String(required=True),
-    'password': fields.String(required=True),
-    'role': fields.String(required=True, enum=['customer', 'admin'])
-})
-
 login_model = api.model('Login', {
-    'username': fields.String(required=True),
-    'password': fields.String(required=True)
+    'email': fields.String(required=True),
+    'password': fields.String(required=True),
 })
 
-product_model = api.model('Product', {
-    'id': fields.Integer(readOnly=True),
-    'name': fields.String(required=True),
-    'price': fields.Float(required=True),
-    'stock': fields.Integer(required=True)
+register_model = api.model('Register', {
+    'username': fields.String(required=True),
+    'email': fields.String(required=True),
+    'password': fields.String(required=True),
 })
 
 transaction_model = api.model('Transaction', {
-    'id': fields.Integer(readOnly=True),
-    'user_id': fields.Integer(required=True),
-    'product_id': fields.Integer(required=True),
-    'quantity': fields.Integer(required=True)
+    'id': fields.Integer(),
+    'c_id': fields.Integer(required=True),
+    's_id': fields.Integer(required=True),
+    'product_amount_list': fields.String(required=True),
+    'date': fields.String(required=True),
+    'time': fields.String(required=True),
 })
 
-# Authentication Endpoints
+customer_model = api.model('Customer', {
+    'id': fields.Integer(),
+    'name': fields.String(required=True),
+    'email': fields.String(required=True),
+})
+
+staff_model = api.model('Staff', {
+    'id': fields.Integer(),
+    'username': fields.String(),
+    'email': fields.String(),
+    'is_admin': fields.Boolean(),
+    'is_approved': fields.Boolean(),
+})
+
+# User Loader
+@login_manager.user_loader
+def load_user(user_id):
+    return Staff.query.get(int(user_id))
+
+# Helper Functions
+def hash_password(password):
+    return bcrypt.generate_password_hash(password).decode('utf-8')
+
+def verify_password(hashed_password, input_password):
+    return bcrypt.check_password_hash(hashed_password, input_password)
+
+def send_email(subject, recipient, body):
+    msg = Message(subject, recipients=[recipient])
+    msg.body = body
+    mail.send(msg)
+
+# Authentication Routes
 @auth_ns.route('/register')
 class Register(Resource):
-    @api.expect(user_model)
+    @auth_ns.expect(register_model)
     def post(self):
-        data = api.payload
-        hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
-        new_user = User(username=data['username'], password=hashed_password, role=data['role'])
-        db.session.add(new_user)
+        data = request.json
+        if Staff.query.filter_by(email=data['email']).first():
+            return {'message': 'Email already registered.'}, 400
+        if Staff.query.filter_by(username=data['username']).first():
+            return {'message': 'Username already exists.'}, 400
+        
+        hashed_password = hash_password(data['password'])
+        token = serializer.dumps(data['email'], salt='email-verification')
+        new_staff = Staff(username=data['username'], email=data['email'], password=hashed_password, verification_token=token)
+        db.session.add(new_staff)
         db.session.commit()
-        return {"message": "User registered successfully."}, 201
+
+        verification_link = url_for('auth_verify_email', token=token, _external=True)
+        send_email('Verify Your Email', data['email'], f'Click to verify: {verification_link}')
+        return {'message': 'Registered successfully. Verify your email.'}, 201
 
 @auth_ns.route('/login')
 class Login(Resource):
-    @api.expect(login_model)
+    @auth_ns.expect(login_model)
     def post(self):
-        data = api.payload
-        user = User.query.filter_by(username=data['username']).first()
-        if user and bcrypt.check_password_hash(user.password, data['password']):
-            session['user_id'] = user.id
-            session['role'] = user.role
-            if user.role == 'customer':
-                return {"message": "Login successful", "role": "customer", "redirect_url": "/customer/dashboard"}, 200
-            elif user.role == 'admin':
-                return {"message": "Login successful", "role": "admin", "redirect_url": "/admin/dashboard"}, 200
-        return {"message": "Invalid username or password"}, 401
+        data = request.json
+        user = Staff.query.filter_by(email=data['email']).first()
+        if user and verify_password(user.password, data['password']):
+            login_user(user)
+            return {'message': 'Login successful.'}, 200
+        return {'message': 'Invalid credentials.'}, 401
 
 @auth_ns.route('/logout')
 class Logout(Resource):
-    def get(self):
-        session.clear()
-        return {"message": "Logged out successfully."}, 200
-
-# Customer Endpoints
-@customer_ns.route('/dashboard')
-class CustomerDashboard(Resource):
-    @login_required(role='customer')
-    def get(self):
-        return {"message": "Welcome to the customer dashboard!"}, 200
-
-@customer_ns.route('/products')
-class CustomerProducts(Resource):
-    @login_required(role='customer')
-    @api.marshal_list_with(product_model)
-    def get(self):
-        return Product.query.all()
-
-@customer_ns.route('/transactions')
-class CustomerTransactions(Resource):
-    @login_required(role='customer')
-    @api.marshal_list_with(transaction_model)
-    def get(self):
-        user_id = session.get('user_id')
-        return Transaction.query.filter_by(user_id=user_id).all()
-
-# Admin Endpoints
-@admin_ns.route('/dashboard')
-class AdminDashboard(Resource):
-    @login_required(role='admin')
-    def get(self):
-        return {"message": "Welcome to the admin dashboard!"}, 200
-
-@admin_ns.route('/products')
-class AdminProducts(Resource):
-    @login_required(role='admin')
-    @api.marshal_list_with(product_model)
-    def get(self):
-        return Product.query.all()
-
-    @login_required(role='admin')
-    @api.expect(product_model)
+    @login_required
     def post(self):
-        data = api.payload
-        new_product = Product(name=data['name'], price=data['price'], stock=data['stock'])
-        db.session.add(new_product)
-        db.session.commit()
-        return {"message": "Product created successfully."}, 201
+        logout_user()
+        return {'message': 'Logout successful.'}, 200
 
-@admin_ns.route('/transactions')
-class AdminTransactions(Resource):
-    @login_required(role='admin')
-    @api.marshal_list_with(transaction_model)
+@auth_ns.route('/verify_email/<token>')
+class VerifyEmail(Resource):
+    def get(self, token):
+        try:
+            email = serializer.loads(token, salt='email-verification', max_age=3600)
+            user = Staff.query.filter_by(email=email).first()
+            if user:
+                user.is_email_verified = True
+                db.session.commit()
+                return {'message': 'Email verified successfully.'}, 200
+            return {'message': 'Invalid or expired link.'}, 400
+        except Exception as e:
+            return {'message': str(e)}, 400
+
+# Transaction CRUD
+@transaction_ns.route('/')
+class Transactions(Resource):
+    @transaction_ns.marshal_with(transaction_model)
     def get(self):
         return Transaction.query.all()
 
-# Run the Application
+    @transaction_ns.expect(transaction_model)
+    def post(self):
+        data = request.json
+        new_transaction = Transaction(**data)
+        db.session.add(new_transaction)
+        db.session.commit()
+        return {'message': 'Transaction created successfully.'}, 201
+
+@transaction_ns.route('/<int:id>')
+class TransactionById(Resource):
+    @transaction_ns.marshal_with(transaction_model)
+    def get(self, id):
+        return Transaction.query.get_or_404(id)
+
+    def delete(self, id):
+        transaction = Transaction.query.get_or_404(id)
+        db.session.delete(transaction)
+        db.session.commit()
+        return {'message': 'Transaction deleted successfully.'}, 200
+
+    @transaction_ns.expect(transaction_model)
+    def put(self, id):
+        data = request.json
+        transaction = Transaction.query.get_or_404(id)
+        transaction.product_amount_list = data['product_amount_list']
+        transaction.date = data['date']
+        transaction.time = data['time']
+        db.session.commit()
+        return {'message': 'Transaction updated successfully.'}, 200
+
+# Staff CRUD
+@staff_ns.route('/')
+class StaffList(Resource):
+    @staff_ns.marshal_with(staff_model)
+    def get(self):
+        return Staff.query.all()
+
+    @staff_ns.expect(staff_model)
+    def post(self):
+        data = request.json
+        if Staff.query.filter_by(email=data['email']).first():
+            return {'message': 'Email already exists.'}, 400
+        hashed_password = hash_password(data['password'])
+        new_staff = Staff(username=data['username'], email=data['email'], password=hashed_password)
+        db.session.add(new_staff)
+        db.session.commit()
+        return {'message': 'Staff created successfully.'}, 201
+
+@staff_ns.route('/<int:id>')
+class StaffById(Resource):
+    @staff_ns.marshal_with(staff_model)
+    def get(self, id):
+        return Staff.query.get_or_404(id)
+
+    def delete(self, id):
+        staff = Staff.query.get_or_404(id)
+        db.session.delete(staff)
+        db.session.commit()
+        return {'message': 'Staff deleted successfully.'}, 200
+
+    @staff_ns.expect(staff_model)
+    def put(self, id):
+        data = request.json
+        staff = Staff.query.get_or_404(id)
+        staff.username = data['username']
+        staff.email = data['email']
+        db.session.commit()
+        return {'message': 'Staff updated successfully.'}, 200
+
+# Customer CRUD
+@customer_ns.route('/')
+class CustomerList(Resource):
+    @customer_ns.marshal_with(customer_model)
+    def get(self):
+        return Customer.query.all()
+
+    @customer_ns.expect(customer_model)
+    def post(self):
+        data = request.json
+        if Customer.query.filter_by(email=data['email']).first():
+            return {'message': 'Email already exists.'}, 400
+        new_customer = Customer(name=data['name'], email=data['email'])
+        db.session.add(new_customer)
+        db.session.commit()
+        return {'message': 'Customer created successfully.'}, 201
+
+@customer_ns.route('/<int:id>')
+class CustomerById(Resource):
+    @customer_ns.marshal_with(customer_model)
+    def get(self, id):
+        return Customer.query.get_or_404(id)
+
+    def delete(self, id):
+        customer = Customer.query.get_or_404(id)
+        db.session.delete(customer)
+        db.session.commit()
+        return {'message': 'Customer deleted successfully.'}, 200
+
+    @customer_ns.expect(customer_model)
+    def put(self, id):
+        data = request.json
+        customer = Customer.query.get_or_404(id)
+        customer.name = data['name']
+        customer.email = data['email']
+        db.session.commit()
+        return {'message': 'Customer updated successfully.'}, 200
+
 if __name__ == '__main__':
     app.run(debug=True)

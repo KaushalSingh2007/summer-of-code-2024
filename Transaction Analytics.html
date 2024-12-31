@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Analytics</title>
+</head>
+<body>
+    <h2>Transaction Analytics</h2>
+    <div id="analytics"></div>
+    <script>
+        fetch('/analytics/transactions', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer YOUR_ACCESS_TOKEN'  // Replace with actual token if required
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('analytics').innerHTML = `
+                <p>Total Transactions: ${data.total_transactions}</p>
+                <p>Total Sales: ${data.total_sales}</p>
+                <p>Average Sale: ${data.average_sale}</p>
+            `;
+        })
+        .catch(error => console.error('Error:', error));
+    </script>
+</body>
+</html>

@@ -3,17 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home</title>
+    <title>Home - Staff and Customer App</title>
 </head>
 <body>
-    <h1>Welcome to the Banking APP</h1>
-    <nav>
-        <ul>
-            <li><a href="/inventory">Inventory</a></li>
-            <li><a href="/customers">Customers</a></li>
-            <li><a href="/staff">Staff</a></li>
-            <li><a href="/transactions">Transactions</a></li>
-        </ul>
-    </nav>
+    <h1>Welcome to the Staff and Customer App</h1>
+    
+    {% if current_user.is_authenticated %}
+        <p>Hello, {{ current_user.username }}!</p>
+        <p><a href="{{ url_for('logout') }}">Logout</a></p>
+    {% else %}
+        <p><a href="{{ url_for('login') }}">Login</a></p>
+        <p><a href="{{ url_for('register') }}">Register</a></p>
+    {% endif %}
+
+    <h2>Other Features</h2>
+    <ul>
+        <li><a href="{{ url_for('setup_mfa') }}">Set up Multi-Factor Authentication (MFA)</a></li>
+        <li><a href="{{ url_for('transaction_analytics') }}">Transaction Analytics</a></li>
+    </ul>
 </body>
 </html>
